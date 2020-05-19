@@ -1,51 +1,32 @@
 #!/bin/bash
-# jenkins部署脚本
+# 部署微服务脚本，
+OPTION=$1
+PROJECT=$2
+PROFILE=$3
+MONITOR_PORT=$4
+CURRENT_USER=`whoami`
+pid=0
+
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-export JAVA_OPTS="-Xms4096m -Xmx4096m"
+export JAVA_OPTS="-Xms2048m -Xmx2048m"
+export JAVA_OPTS_TEST="-Xms512m -Xmx512m"
 export PROJECT_HOME=/home/workspace/ntesgod
 export APP_USER="www-data"
-export APP_HOME=apps
 export VERSION=1.0.0-SNAPSHOT
-export ALL_APPS=("admin-server")
 LANG=en_US.UTF-8
 export LANG
 
-OPTION=$1
-PROJECT=$2
-CURRENT_USER=`whoami`
-PROFILE=$3
-#初始化全局pid变量
-pid=0
-
-print_usage() {
-    echo "usage: $0 build test|server";
-    echo "       $0 start|stop|restart all|admin-server test|server";
-    exit -1;
-}
-
-backup() {
-    APP=$1
-    NOW=`date '+%Y%m%d_%H%M%S'`
-    APP_DIR=${APP/./\/}-${PROFILE}
-    JAR_NAME=${APP#*.}-${VERSION}.jar
-    cp ${APP_HOME}/${APP_DIR}/${JAR_NAME} release/${JAR_NAME}.${PROFILE}.${NOW}
-
-    echo "[BACKUP] ${APP_HOME}/${APP_DIR}/${JAR_NAME} to release/${JAR_NAME}.${PROFILE}.${NOW}"
-}
-
 copy() {
-	APP=$1
+  APP=$1
 	# 将mq.feed替换成mq/feed
 	DIR=${APP/./\/}
-    # mq.feed替换成feed-1.0.0-SNAPSHOT.jar
-    JAR_NAME=${APP#*.}-${VERSION}.jar
-    # 应用的jar包存放的目录
-    APP_DIR=${APP_HOME}/${DIR}-${PROFILE}/
-
-    mkdir -p ${APP_DIR}
-    cp source/${JAR_NAME} ${APP_DIR}
-
-    echo "[COPY] source/${JAR_NAME} to ${APP_DIR}"
+  # mq.feed替换成feed-1.0.0-SNAPSHOT.jar
+  JAR_NAME=${APP#*.}-${VERSION}.jar
+  # 应用的jar包存放的目录
+  APP_DIR=${PROJECT_HOME}/${DIR}/
+  mkdir -p ${APP_DIR}
+  cp ${PROJECT_HOME}/source/${PROJECT}/target/${JAR_NAME} ${APP_DIR}
+  echo "[COPY] ${PROJECT_HOME}/source/${PROJECT}/target/${JAR_NAME} ${APP_DIR}"
 }
 
 get_pid() {
@@ -53,7 +34,7 @@ get_pid() {
     JAR_NAME=${APP#*.}-${VERSION}.jar
     jps_result=`${JAVA_HOME}/bin/jps -ml | grep ${JAR_NAME} |grep active=${PROFILE}`
 
-    if [ -n "$jps_result" ]; then
+    if [[ -n "$jps_result" ]]; then
         echo "[GET_PID] of ${APP}: ${jps_result};"
         pid=`echo ${jps_result} | awk '{print $1}'`
     else
@@ -62,29 +43,57 @@ get_pid() {
    fi
 }
 
+check_server_health() {
+    count=0
+    health_url="http://127.0.0.1:${MONITOR_PORT}/health"
+    echo "[check_health] [${health_url}] blocking..........."
+    while :
+    do
+        http_code=`curl -I -m 3 -o /dev/null -s -w %{http_code} "${health_url}"`
+        if [[ ${http_code} -eq 200 ]]; then
+            echo "[check_health] finish"
+            return
+        fi
+        sleep 3
+    done
+}
+
+# 下线微服务
+pause_server() {
+    pause_url="http://127.0.0.1:${MONITOR_PORT}/pause"
+    echo "[pause_server] [${pause_url}] "
+    result=`curl -X POST -m 5 -s "${pause_url}"`
+    echo "[pause_server] result:${result}.blocking 30s............"
+    sleep 30
+}
+
 start() {
     APP=$1
     DIR=${APP/./\/}
     JAR_NAME=${APP#*.}-${VERSION}.jar
-    APP_DIR=${APP_HOME}/${DIR}-${PROFILE}/
+    APP_DIR=${PROJECT_HOME}/${DIR}/
     get_pid ${APP}
-    if [ ${pid} -ne 0 ]; then
+    if [[ ${pid} -ne 0 ]]; then
         echo "WARN: $APP already started! (pid=$pid)";
     else
         echo -n "[START] ${APP} :";
-        cd ${APP_DIR} && nohup ${JAVA_HOME}/bin/java ${JAVA_OPTS} -jar ${JAR_NAME} --spring.profiles.active=$PROFILE > ${PROJECT_HOME}/log/${APP}-${PROFILE}.log 2>&1 &
+        JAVA_OPTS_RUNNING=${JAVA_OPTS}
+        if [[ "${PROFILE}" == "test" ]]; then
+            JAVA_OPTS_RUNNING=${JAVA_OPTS_TEST}
+        fi
+        cd ${APP_DIR} && nohup ${JAVA_HOME}/bin/java ${JAVA_OPTS_RUNNING} -jar ${JAR_NAME} --spring.profiles.active=${PROFILE} > nohup.log 2>&1 &
 
-        if [ $? -eq 0 ]; then
+        if [[ $? -eq 0 ]]; then
             echo -e " [OK]"
         else
             echo -e " [Failed]"
         fi
-        sleep 5
-        get_pid ${APP}
-        if [ ${pid} -ne 0 ]; then
-            echo "RELEASE_SUCCESS: $APP (PID=$pid)"
+        check_server_health
+        if [[ $? -eq 0 ]]; then
+            get_pid ${APP}
+            echo "『RELEASE_SUCCESS』: $APP (PID=$pid)"
         else
-            echo "RELEASE_FAIL: $APP"
+            echo "『RELEASE_FAIL』: $APP"
         fi
     fi
 }
@@ -93,13 +102,14 @@ stop() {
     APP=$1
     get_pid ${APP}
 
-    if [ ${pid} -ne 0 ]; then
-      echo -n "[STOP] $APP ...(pid=$pid) "
-      kill -9 ${pid}
-      if [ $? -eq 0 ]; then
-         echo " [OK]"
+    if [[ ${pid} -ne 0 ]]; then
+      echo "[STOP] $APP ...(pid=$pid) "
+      pause_server
+      kill ${pid}
+      if [[ $? -eq 0 ]]; then
+         echo "[STOP] OK"
       else
-         echo " [Failed]"
+         echo "[STOP] FAIL"
       fi
       sleep 5
    else
@@ -107,20 +117,11 @@ stop() {
    fi
 }
 
-if [ "${CURRENT_USER}" != "${APP_USER}" ]; then
+if [[ "${CURRENT_USER}" != "${APP_USER}" ]]; then
     echo "must use ${APP_USER} to execute this script."
     exit -1;
 fi
 
-if [ "$1" == "" ]; then
-    print_usage
-fi
-if [ "${PROFILE}" == "" ]; then
-    print_usage;
-fi
-if [ "${OPTION}" == "start" -a "${PROJECT}" == "" ]; then
-    print_usage
-fi
 echo "================================================================"
 case "$OPTION" in
     'start')
@@ -134,13 +135,11 @@ case "$OPTION" in
         start ${PROJECT}
         ;;
     'release')
-        #backup ${PROJECT}
         stop ${PROJECT}
         copy ${PROJECT}
         start ${PROJECT}
         ;;
   *)
-    print_usage
     exit 1
 esac
 echo "================================================================"
