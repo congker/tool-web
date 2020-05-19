@@ -1,0 +1,10 @@
+spring:
+  application:
+    name: tool-web
+  profiles:
+    active: default
+  devtools:
+    add-properties: false
+server:
+  port: 8088
+
