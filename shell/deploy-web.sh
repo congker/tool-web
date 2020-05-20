@@ -35,8 +35,8 @@ checkServerHealth() {
   echo "[checkHealth] [${healthUrl}] blocking..........."
   while :; do
     # shellcheck disable=SC1083
-    httpCode=$(curl -I -m 3 -o /dev/null -s -w %{httpCode} "${healthUrl}")
-    if [[ ${httpCode} -eq 200 ]]; then
+    http_code=$(curl -I -m 3 -o /dev/null -s -w %{http_code} "${healthUrl}")
+    if [[ ${http_code} -eq 200 ]]; then
       echo "[checkHealth] finish"
       return
     fi
