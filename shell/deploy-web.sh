@@ -109,7 +109,7 @@ copyApp() {
   # 应用的jar包存放的目录
   APP_DIR=${PROJECT_HOME}/${DIR}/
   mkdir -p ${APP_DIR}
-  cp ${PROJECT_HOME}/source/${PROJECT}/${JAR_NAME} ${APP_DIR}
+  cp ${PROJECT_HOME}/${PROJECT}/source/${JAR_NAME} ${APP_DIR}
   echo "[COPY] ${PROJECT_HOME}/source/${PROJECT}/${JAR_NAME} ${APP_DIR}"
 }
 
