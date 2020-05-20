@@ -9,7 +9,7 @@ pid=0
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 export JAVA_OPTS="-Xms2048m -Xmx2048m"
 export JAVA_OPTS_TEST="-Xms512m -Xmx512m"
-export PROJECT_HOME=/home/winsonxu/workspace/
+export PROJECT_HOME=/home/winsonxu/workspace
 export APP_USER="winsonxu"
 export VERSION=1.0.0-SNAPSHOT
 LANG=en_US.UTF-8
@@ -18,7 +18,7 @@ export LANG
 getPid() {
   APP=$1
   JAR_NAME=${APP#*.}-${VERSION}.jar
-  jps_result=$(${JAVA_HOME}/bin/jps -ml | grep ${JAR_NAME} | grep active=${PROFILE})
+  jps_result=$(/usr/bin/jps -ml | grep ${JAR_NAME} | grep active=${PROFILE})
   if [[ -n "$jps_result" ]]; then
     echo "[GET_PID] of ${APP}: ${jps_result};"
     pid=$(echo ${jps_result} | awk '{print $1}')
@@ -67,7 +67,7 @@ startApp() {
     if [[ "${PROFILE}" == "test" ]]; then
       JAVA_OPTS_RUNNING=${JAVA_OPTS_TEST}
     fi
-    cd ${APP_DIR} && nohup ${JAVA_HOME}/bin/java ${JAVA_OPTS_RUNNING} -jar ${JAR_NAME} --spring.profiles.active=${PROFILE} >nohup.log 2>&1 &
+    cd ${APP_DIR} && nohup /usr/bin/java ${JAVA_OPTS_RUNNING} -jar ${JAR_NAME} --spring.profiles.active=${PROFILE} >nohup.log 2>&1 &
     if [[ $? -eq 0 ]]; then
       echo -e " [OK]"
     else
@@ -109,8 +109,8 @@ copyApp() {
   # 应用的jar包存放的目录
   APP_DIR=${PROJECT_HOME}/${DIR}/
   mkdir -p ${APP_DIR}
-  cp ${PROJECT_HOME}/source/${PROJECT}/target/${JAR_NAME} ${APP_DIR}
-  echo "[COPY] ${PROJECT_HOME}/source/${PROJECT}/target/${JAR_NAME} ${APP_DIR}"
+  cp ${PROJECT_HOME}/source/${PROJECT}/${JAR_NAME} ${APP_DIR}
+  echo "[COPY] ${PROJECT_HOME}/source/${PROJECT}/${JAR_NAME} ${APP_DIR}"
 }
 
 #主程序
